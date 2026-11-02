@@ -275,5 +275,6 @@ def get_install_order(signup_app: str) -> list[AppRelease]:
 
 
 def get_release_set_id(install_order: list[AppRelease]) -> str:
-	"""Names an Apps image's whole install set, so a move of any app in it is a new build."""
-	return hashlib.sha256("\n".join(f"{app.name} {app.commit}" for app in install_order).encode()).hexdigest()
+	"""Names an Apps image's whole install set, so a move of any app in it is a new build. It fits
+	`app_commit`, which holds 40 characters."""
+	return hashlib.sha256("\n".join(f"{app.name} {app.commit}" for app in install_order).encode()).hexdigest()[:40]
