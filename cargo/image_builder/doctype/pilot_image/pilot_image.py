@@ -11,6 +11,7 @@ from frappe.query_builder.functions import Min
 from cargo.atlas_client import PILOT_IMAGE_OS_TAGS, base_image_id
 from cargo.cargo.doctype.machine.machine import Machine as MachineDoc
 from cargo.image_builder.doctype.build_machine import BuildMachineOwner
+from cargo.image_builder.doctype.pilot_image import intrakore
 from cargo.image_builder.doctype.pilot_image.apps import (
 	get_assets_url,
 	get_install_order,
@@ -89,7 +90,7 @@ class PilotImage(BuildMachineOwner, WorkflowBuilder):
 				frappe.throw(
 					_("{0} images need the Frappe commit of the image they boot on.").format(self.image_type)
 				)
-			self.frappe_commit = get_frappe_head_commit(self.frappe_branch)
+			self.frappe_commit = get_frappe_commit(self.frappe_branch)
 
 		if self.image_type == "Apps" and not (self.signup_app and self.app_commit):
 			frappe.throw(_("Apps images need a signup app and its release commit."))
@@ -247,8 +248,7 @@ class PilotImage(BuildMachineOwner, WorkflowBuilder):
 
 		self.apps = []
 		if self.image_type == "Apps":
-			release = get_release_at(self.signup_app, self.app_commit)
-			for app in get_install_order(release, self.frappe_version):
+			for app in self.resolve_install_order():
 				self.append(
 					"apps",
 					{
@@ -261,6 +261,17 @@ class PilotImage(BuildMachineOwner, WorkflowBuilder):
 				)
 
 		self.save()
+
+	def resolve_install_order(self) -> list["AppRelease"]:
+		if not intrakore.is_intrakore_source():
+			return get_install_order(get_release_at(self.signup_app, self.app_commit), self.frappe_version)
+
+		install_order = intrakore.get_install_order(self.signup_app)
+		if intrakore.get_release_set_id(install_order) != self.app_commit:
+			frappe.throw(
+				_("The INTRAKORE App Releases changed after this image started. A new image builds them.")
+			)
+		return install_order
 
 	@property
 	def is_warm_image(self) -> bool:
@@ -311,7 +322,7 @@ class PilotImage(BuildMachineOwner, WorkflowBuilder):
 			.replace('"__PROXY_SUBNET__"', json.dumps(proxy_subnet))
 		)
 
-		return {
+		environment = {
 			"VERSION": self.pilot_version,
 			"FRAPPE_BRANCH": self.frappe_branch,
 			"FRAPPE_COMMIT": self.frappe_commit,
@@ -323,6 +334,11 @@ class PilotImage(BuildMachineOwner, WorkflowBuilder):
 				f"{app.app} {app.repo} {app.branch} {app.commit}" for app in self.apps
 			),
 		}
+		# Only the Apps step fetches repositories, and it removes the token before the snapshot.
+		if self.image_type == "Apps" and (token := intrakore.get_build_token()):
+			environment["GIT_TOKEN"] = token
+
+		return environment
 
 
 def get_frappe_branches() -> list[str]:
@@ -333,6 +349,19 @@ def get_frappe_branches() -> list[str]:
 		pluck="branch",
 		order_by="idx asc",
 	)
+
+
+def get_pinned_frappe_commit(frappe_branch: str) -> str | None:
+	return frappe.db.get_value(
+		"Frappe Branch",
+		{"parenttype": "Cargo Settings", "parentfield": "frappe_branches", "branch": frappe_branch},
+		"commit",
+	)
+
+
+def get_frappe_commit(frappe_branch: str) -> str:
+	"""The commit Cargo Settings pins `frappe_branch` to, or else its head commit."""
+	return get_pinned_frappe_commit(frappe_branch) or get_frappe_head_commit(frappe_branch)
 
 
 def get_newest_completed_image(image_type: str, frappe_branch: str) -> dict | None:
@@ -406,7 +435,7 @@ def start_base_images(force: bool = False) -> list[str]:
 		image = {
 			"pilot_version": pilot_version,
 			"frappe_branch": frappe_branch,
-			"frappe_commit": get_frappe_head_commit(frappe_branch),
+			"frappe_commit": get_frappe_commit(frappe_branch),
 			"image_type": "Base",
 		}
 		if not has_prebuilt_assets(image):
@@ -420,14 +449,26 @@ def start_base_images(force: bool = False) -> list[str]:
 def has_prebuilt_assets(image: dict[str, str], install_order: Iterable[AppRelease] = ()) -> bool:
 	"""Check weather all the pre-built assets are ready for everything that's about to be built."""
 	if image["image_type"] == "Base":
-		urls = [
-			PILOT_TARBALL_URL.format(version=image["pilot_version"]),
-			get_assets_url(FRAPPE_REPO, "frappe", image["frappe_branch"], image["frappe_commit"]),
-		]
+		urls = [PILOT_TARBALL_URL.format(version=image["pilot_version"])]
+		if not builds_frappe_assets(image["frappe_branch"], image["frappe_commit"]):
+			urls.append(get_assets_url(FRAPPE_REPO, "frappe", image["frappe_branch"], image["frappe_commit"]))
 	else:
-		urls = [get_assets_url(app.repo, app.name, app.branch, app.commit) for app in install_order]
+		urls = [
+			get_assets_url(app.repo, app.name, app.branch, app.commit)
+			for app in install_order
+			if app.prebuilt_assets
+		]
 
 	return all(is_published(url) for url in urls)
+
+
+def builds_frappe_assets(frappe_branch: str, frappe_commit: str) -> bool:
+	"""Whether the build makes Frappe's assets itself: Frappe publishes none for an older commit
+	a branch is pinned to."""
+	return bool(
+		frappe.db.get_single_value("Cargo Settings", "build_without_prebuilt_assets")
+		and get_pinned_frappe_commit(frappe_branch) == frappe_commit
+	)
 
 
 def start_site_images() -> list[str]:
@@ -474,25 +515,20 @@ def start_apps_images_on(site_image: dict | PilotImage, force: bool = False) -> 
 	`force` is set, a release that has an image on any Site image is skipped."""
 	started = []
 	for signup_app in get_signup_apps():
-		release = get_latest_compatible_release(signup_app, site_image.frappe_version)
-		if not release:
+		build = get_apps_build(signup_app, site_image.frappe_version)
+		if not build:
 			continue
 
+		app_commit, install_order = build
 		if not force and frappe.db.exists(
 			"Pilot Image",
 			{
 				"image_type": "Apps",
 				"frappe_branch": site_image.frappe_branch,
 				"signup_app": signup_app,
-				"app_commit": release.commit,
+				"app_commit": app_commit,
 			},
 		):
-			continue
-
-		try:
-			install_order = get_install_order(release, site_image.frappe_version)
-		except frappe.ValidationError:
-			# A requirement has no compatible release yet, so the app cannot be installed.
 			continue
 
 		image = {
@@ -501,7 +537,7 @@ def start_apps_images_on(site_image: dict | PilotImage, force: bool = False) -> 
 			"frappe_commit": site_image.frappe_commit,
 			"image_type": "Apps",
 			"signup_app": signup_app,
-			"app_commit": release.commit,
+			"app_commit": app_commit,
 		}
 		if not has_prebuilt_assets(image, install_order):
 			continue
@@ -509,6 +545,26 @@ def start_apps_images_on(site_image: dict | PilotImage, force: bool = False) -> 
 			started.append(name)
 
 	return started
+
+
+def get_apps_build(signup_app: str, frappe_version: str) -> tuple[str, list[AppRelease]] | None:
+	"""The `app_commit` an Apps image of `signup_app` is known by, and what it installs. None while
+	the app or a requirement has no release. An INTRAKORE image is known by its whole install set."""
+	if intrakore.is_intrakore_source():
+		try:
+			install_order = intrakore.get_install_order(signup_app)
+		except frappe.ValidationError:
+			return None
+		return intrakore.get_release_set_id(install_order), install_order
+
+	release = get_latest_compatible_release(signup_app, frappe_version)
+	if not release:
+		return None
+	try:
+		return release.commit, get_install_order(release, frappe_version)
+	except frappe.ValidationError:
+		# A requirement has no compatible release yet, so the app cannot be installed.
+		return None
 
 
 def get_images_to_retry(frappe_branch: str) -> list[str]:

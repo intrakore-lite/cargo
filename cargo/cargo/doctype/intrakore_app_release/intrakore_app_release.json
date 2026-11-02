@@ -1,0 +1,80 @@
+{
+ "actions": [],
+ "creation": "2026-11-03 10:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "app",
+  "install_order",
+  "branch",
+  "commit",
+  "version",
+  "requires",
+  "repo"
+ ],
+ "fields": [
+  {
+   "description": "The app's module name, such as intrakore_crm.",
+   "fieldname": "app",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "App",
+   "reqd": 1
+  },
+  {
+   "description": "The order in the devops manifest. Of two apps that can install at the same time, the lower one installs first.",
+   "fieldname": "install_order",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Install Order"
+  },
+  {
+   "description": "The branch the commit is on. Blank takes the default branch.",
+   "fieldname": "branch",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Branch"
+  },
+  {
+   "description": "The full commit the image installs.",
+   "fieldname": "commit",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Commit",
+   "reqd": 1
+  },
+  {
+   "description": "The app's __version__ at the commit. An Atlas tag of the image carries it.",
+   "fieldname": "version",
+   "fieldtype": "Data",
+   "label": "Version"
+  },
+  {
+   "description": "The apps that install before this one, one per line: the required_apps of its hooks.py at the commit.",
+   "fieldname": "requires",
+   "fieldtype": "Small Text",
+   "label": "Requires"
+  },
+  {
+   "description": "The https:// clone URL. Blank takes the repository base and the app name.",
+   "fieldname": "repo",
+   "fieldtype": "Data",
+   "label": "Repository"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-11-03 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Cargo",
+ "name": "Intrakore App Release",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

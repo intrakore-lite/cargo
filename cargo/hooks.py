@@ -299,5 +299,8 @@ scheduler_events = {
 		],
 	},
 	"hourly": ["cargo.object_storage.health.prune_history", "cargo.image_builder.health.ship_metrics"],
-	"hourly_long": ["cargo.image_builder.doctype.one_click_image.one_click_image.refresh_latest_registry"],
+	"hourly_long": [
+		"cargo.image_builder.doctype.one_click_image.one_click_image.refresh_latest_registry",
+		"cargo.image_builder.doctype.pilot_image.intrakore.sync_scheduled",
+	],
 }

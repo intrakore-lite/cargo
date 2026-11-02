@@ -17,6 +17,8 @@ SETTINGS = {
 	"track_pilot_releases": 0,
 	"max_auto_retry_count": 3,
 	"update_pilot_in_base_image": 0,
+	"app_source": "Marketplace",
+	"build_without_prebuilt_assets": 1,
 	"storage_node_spread": "Separate hosts",
 	"storage_node_spread_within": "",
 }

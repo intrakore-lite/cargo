@@ -20,5 +20,44 @@ frappe.ui.form.on("Cargo Settings", {
 			},
 			__("Build")
 		);
+		frm.add_custom_button(
+			__("Sync INTRAKORE Apps"),
+			() => sync_intrakore_apps(frm),
+			__("Build")
+		);
 	},
 });
+
+function sync_intrakore_apps(frm) {
+	const dialog = new frappe.ui.Dialog({
+		title: __("Sync INTRAKORE Apps"),
+		fields: [
+			{
+				fieldname: "lock",
+				fieldtype: "Code",
+				label: __("Lock File"),
+				description: __("Paste a lock file, or leave blank to read the Lock File URL."),
+			},
+			{
+				fieldname: "manifest",
+				fieldtype: "Code",
+				label: __("Manifest"),
+				description: __("Optional. Leave blank to read the Manifest URL, if set."),
+			},
+		],
+		primary_action_label: __("Sync"),
+		primary_action(values) {
+			dialog.hide();
+			frm.call({
+				doc: frm.doc,
+				method: "sync_intrakore_apps",
+				args: values,
+				freeze: true,
+			}).then(({ message }) => {
+				frappe.show_alert(__("{0} apps moved", [message.length]));
+				frm.reload_doc();
+			});
+		},
+	});
+	dialog.show();
+}

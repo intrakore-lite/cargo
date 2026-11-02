@@ -16,6 +16,7 @@ class FrappeBranch(Document):
 		from frappe.types import DF
 
 		branch: DF.Data
+		commit: DF.Data | None
 		parent: DF.Data
 		parentfield: DF.Data
 		parenttype: DF.Data

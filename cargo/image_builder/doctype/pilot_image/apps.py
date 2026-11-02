@@ -19,6 +19,8 @@ class AppRelease:
 	commit: str
 	branch: str
 	requires: tuple[str, ...]
+	# False for a source whose CI publishes no prebuilt assets: Pilot builds them on the machine.
+	prebuilt_assets: bool = True
 
 
 def get_registry_path() -> Path:

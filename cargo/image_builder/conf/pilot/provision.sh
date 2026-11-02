@@ -37,6 +37,10 @@ PROBE_DELAY="${PROBE_DELAY:-5}"
 IDLE_RESTART_SECONDS="${IDLE_RESTART_SECONDS:-900}"
 # One `app repo branch commit` line per app, in install order: what an app requires comes first.
 REQUIRED_APPS="${REQUIRED_APPS:-}"
+# A read-only token for private app repositories, Apps builds only. Kept unexported, so no
+# command below inherits it, and never echoed.
+BUILD_GIT_TOKEN="${GIT_TOKEN:-}"
+unset GIT_TOKEN
 
 case "$IMAGE_TYPE" in
 Base | Site) [ -z "$REQUIRED_APPS" ] || { echo "A $IMAGE_TYPE image installs no apps" >&2; exit 1; } ;;
@@ -59,6 +63,8 @@ as_bench_user() {
 rm -f "$PROVIDER_SCRIPT"
 
 BENCH_PATH="/home/$BENCH_USER/pilot/benches/$BENCH"
+# Pilot reads a bench's git credentials here and sends them as a header, never in .git/config.
+GIT_CREDENTIALS="$BENCH_PATH/.bench.git.info"
 
 # A Base build that boots on an earlier Base image finds the bench there. It moves Pilot to the
 # newest release and Frappe to the commit; the host setup below is already in the image.
@@ -212,12 +218,26 @@ if [ "$IMAGE_TYPE" = Site ]; then
 fi
 
 if [ "$IMAGE_TYPE" = Apps ]; then
+	# Every customer VM boots this image, so the token lives only while the apps are fetched.
+	# The trap removes it when a fetch fails too.
+	if [ -n "$BUILD_GIT_TOKEN" ]; then
+		trap 'rm -f "$GIT_CREDENTIALS"' EXIT
+		install -m 600 -o "$BENCH_UID" -g "$BENCH_GID" /dev/null "$GIT_CREDENTIALS"
+		# printf is a builtin, so the token is in no process's arguments.
+		printf '{"provider": "github", "token": "%s", "is_token_valid": true}\n' "$BUILD_GIT_TOKEN" > "$GIT_CREDENTIALS"
+		BUILD_GIT_TOKEN=""
+	fi
+
 	apps=()
-	# The branch lets Pilot download the assets the app's CI built for the commit.
+	# The branch lets Pilot download the assets the app's CI built for the commit. Pilot builds
+	# them itself when the commit has none.
 	while read -r app repo branch commit; do
 		as_bench_user "pilot --yes -b '$BENCH' get-app '$repo' --branch '$branch' --commit '$commit'"
 		apps+=("$app")
 	done <<< "$REQUIRED_APPS"
+
+	rm -f "$GIT_CREDENTIALS"
+	[ ! -e "$GIT_CREDENTIALS" ] || { echo "The git credentials are still on the bench" >&2; exit 1; }
 	as_bench_user "pilot --yes -b '$BENCH' install-app '$SITE' ${apps[*]}"
 fi
 
