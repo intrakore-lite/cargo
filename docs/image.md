@@ -33,6 +33,33 @@ List the apps in **Signup Apps** in Cargo Settings, such as `erpnext` or `helpde
 
 Use Pilot `v0.0.32-pre-alpha` or later. Earlier releases have no Central bootstrap state, and their production setup does not enable nginx at boot.
 
+## INTRAKORE app source
+
+Set **App Source** in Cargo Settings to `Intrakore` to build images of INTRAKORE's own apps instead of marketplace apps.
+
+| Setting | Meaning |
+|---|---|
+| INTRAKORE App Releases | One row per app: the commit, branch, install order, and the apps it requires. A sync fills it. |
+| Lock File URL | The raw URL of a devops lock file, such as `environments/prod.lock`. Each line is an app, a tab, and a full commit. |
+| Manifest URL | Optional. The devops manifest, such as `environments/prod.yml`. It gives each app its install order and branch. |
+| Repository Base | An app's repository is this base and the app name, such as `https://github.com/intrakore-lite/intrakore_crm.git`. |
+| GitHub Token | A read-only token for the private repositories. |
+| Also Installs | On a Signup App row: more apps the image installs with it, such as `intrakore_estimation` with `intrakore_crm` for one bundle. |
+
+**Sync INTRAKORE Apps**, under Build in Cargo Settings, reads a pasted lock file or the Lock File URL. The `hourly_long` job does the same while the source is on and the URL is set. A sync reads `required_apps` from each app's `hooks.py` and `__version__` from its `__init__.py` at the locked commit, and only for the apps whose commit moved. An app gone from the lock file is dropped.
+
+An Apps image installs the signup app, its Also Installs apps, and all they require. Each app installs after what it requires. Of the apps free to install, the lower install order goes first, as on the benches. The image's `app_commit` is a hash of the whole install set, so a move of any app in it starts a new image. A build whose set moved after it started fails at `pin_releases`, and the image for the new set builds instead.
+
+The token is sent only to GitHub hosts, and to the build machine only for an Apps build. There `provision.sh` writes it to the bench's `.bench.git.info`, where Pilot reads it and sends it as a header, not in `.git/config`. The script removes the file after the last `get-app` and before `install-app`, and stops if the file is still there. A trap removes it when a fetch fails.
+
+### Frappe pin
+
+A **Frappe Branches** row can pin its branch to a **Pinned Commit**. Base images then build that commit and not the branch head, such as `4113465d23888d70936bb332fd9110ab4330cbf1`, Frappe 16.26.3 on `version-16`. A blank commit follows the head.
+
+### Prebuilt assets
+
+Frappe publishes no prebuilt assets for an older commit, and private repositories have none. While **Build Without Prebuilt Assets** is on, the default, a Base image of a pinned commit waits only for the Pilot release, and an INTRAKORE Apps image waits for nothing. Pilot builds the assets on the build machine. Marketplace apps and unpinned branches keep the check.
+
 ## Build sequence
 
 Insert a Pilot Image, or let release tracking insert one.

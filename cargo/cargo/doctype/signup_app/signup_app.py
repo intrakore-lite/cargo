@@ -15,6 +15,7 @@ class SignupApp(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
+		also_installs: DF.SmallText | None
 		app: DF.Data
 		parent: DF.Data
 		parentfield: DF.Data

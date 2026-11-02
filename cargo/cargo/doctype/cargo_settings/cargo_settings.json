@@ -33,6 +33,17 @@
   "last_repository_refresh",
   "signup_apps_section",
   "signup_apps",
+  "intrakore_apps_section",
+  "app_source",
+  "build_without_prebuilt_assets",
+  "intrakore_repository_base",
+  "intrakore_default_branch",
+  "intrakore_github_token",
+  "column_break_intrakore",
+  "intrakore_lock_url",
+  "intrakore_manifest_url",
+  "intrakore_last_sync",
+  "intrakore_apps",
   "build_machine_spec_section",
   "build_machine_disk_gb",
   "build_machine_cpu",
@@ -352,13 +363,80 @@
    "fieldtype": "Datetime",
    "label": "Last Repository Refresh",
    "read_only": 1
+  },
+  {
+   "description": "Marketplace reads the signup apps and their releases from Pilot's marketplace registry. Intrakore reads them from the INTRAKORE App Releases below, which a sync fills from the devops lock file.",
+   "fieldname": "intrakore_apps_section",
+   "fieldtype": "Section Break",
+   "label": "App Source"
+  },
+  {
+   "default": "Marketplace",
+   "fieldname": "app_source",
+   "fieldtype": "Select",
+   "label": "App Source",
+   "options": "Marketplace\nIntrakore"
+  },
+  {
+   "default": "1",
+   "description": "Start images of a pinned Frappe commit and of INTRAKORE apps without their prebuilt assets. Pilot builds the assets on the build machine instead.",
+   "fieldname": "build_without_prebuilt_assets",
+   "fieldtype": "Check",
+   "label": "Build Without Prebuilt Assets"
+  },
+  {
+   "default": "https://github.com/intrakore-lite",
+   "description": "An app's repository is this base and the app name, unless its row names one.",
+   "fieldname": "intrakore_repository_base",
+   "fieldtype": "Data",
+   "label": "Repository Base"
+  },
+  {
+   "default": "main",
+   "fieldname": "intrakore_default_branch",
+   "fieldtype": "Data",
+   "label": "Default Branch"
+  },
+  {
+   "description": "A read-only GitHub token for the private app repositories. The build machine gets it for the Apps step only and removes it before the snapshot.",
+   "fieldname": "intrakore_github_token",
+   "fieldtype": "Password",
+   "label": "GitHub Token"
+  },
+  {
+   "fieldname": "column_break_intrakore",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The raw URL of the devops lock file, such as environments/prod.lock. Lines are app, a tab and the full commit. The GitHub token is sent to GitHub hosts only.",
+   "fieldname": "intrakore_lock_url",
+   "fieldtype": "Data",
+   "label": "Lock File URL"
+  },
+  {
+   "description": "Optional raw URL of the devops manifest, such as environments/prod.yml. It gives each app its install order and branch.",
+   "fieldname": "intrakore_manifest_url",
+   "fieldtype": "Data",
+   "label": "Manifest URL"
+  },
+  {
+   "fieldname": "intrakore_last_sync",
+   "fieldtype": "Datetime",
+   "label": "Last Sync",
+   "read_only": 1
+  },
+  {
+   "fieldname": "intrakore_apps",
+   "fieldtype": "Table",
+   "label": "INTRAKORE App Releases",
+   "options": "Intrakore App Release"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-11-02 16:00:00.000000",
+ "modified": "2026-11-03 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Cargo",
  "name": "Cargo Settings",

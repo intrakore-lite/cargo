@@ -4,6 +4,7 @@
 import frappe
 from frappe.model.document import Document
 
+from cargo.image_builder.doctype.pilot_image import intrakore
 from cargo.image_builder.doctype.pilot_image.pilot_image import start_base_images
 
 
@@ -19,14 +20,17 @@ class CargoSettings(Document):
 		from frappe.types import DF
 
 		from cargo.cargo.doctype.frappe_branch.frappe_branch import FrappeBranch
+		from cargo.cargo.doctype.intrakore_app_release.intrakore_app_release import IntrakoreAppRelease
 		from cargo.cargo.doctype.signup_app.signup_app import SignupApp
 
+		app_source: DF.Literal["Marketplace", "Intrakore"]
 		atlas_tenant_id: DF.Int
 		atlas_token: DF.Password
 		atlas_url: DF.Data
 		build_machine_cpu: DF.Int
 		build_machine_disk_gb: DF.Int
 		build_machine_memory: DF.Int
+		build_without_prebuilt_assets: DF.Check
 		cargo_url: DF.Data
 		central_url: DF.Data
 		central_webhook_enabled: DF.Check
@@ -34,6 +38,13 @@ class CargoSettings(Document):
 		central_webhook_url: DF.Data | None
 		first_storage_disk_growth_percent: DF.Percent
 		frappe_branches: DF.Table[FrappeBranch]
+		intrakore_apps: DF.Table[IntrakoreAppRelease]
+		intrakore_default_branch: DF.Data | None
+		intrakore_github_token: DF.Password | None
+		intrakore_last_sync: DF.Datetime | None
+		intrakore_lock_url: DF.Data | None
+		intrakore_manifest_url: DF.Data | None
+		intrakore_repository_base: DF.Data | None
 		jwks_url: DF.Data
 		last_repository_refresh: DF.Datetime | None
 		max_auto_retry_count: DF.Int
@@ -58,8 +69,24 @@ class CargoSettings(Document):
 	def validate(self) -> None:
 		# Every consumer builds a domain from this, so it is canonicalised once, here.
 		self.wildcard_domain = (self.wildcard_domain or "").strip().strip(".").lower()
+		self.validate_intrakore_github_token()
+		for branch in self.frappe_branches:
+			if branch.commit and not intrakore.FULL_COMMIT.fullmatch(branch.commit.strip()):
+				frappe.throw(frappe._("Pin {0} to a full commit.").format(branch.branch))
+
+	def validate_intrakore_github_token(self) -> None:
+		"""A saved token comes back masked, and only a new one is checked."""
+		if self.intrakore_github_token and not self.is_dummy_password(self.intrakore_github_token):
+			self.intrakore_github_token = self.intrakore_github_token.strip()
+			intrakore.validate_github_token(self.intrakore_github_token)
 
 	@frappe.whitelist()
 	def build_base_images(self) -> list[str]:
 		"""Start a Base image of the newest Pilot release on each Frappe branch head, if it has none."""
 		return start_base_images(force=True)
+
+	@frappe.whitelist()
+	def sync_intrakore_apps(self, lock: str | None = None, manifest: str | None = None) -> list[str]:
+		"""Fill the INTRAKORE App Releases from a pasted lock file, or from the Lock File URL."""
+		frappe.only_for("System Manager")
+		return intrakore.sync_app_releases(lock, manifest)
