@@ -337,6 +337,10 @@ class PilotImage(BuildMachineOwner, WorkflowBuilder):
 		# Only the Apps step fetches repositories, and it removes the token before the snapshot.
 		if self.image_type == "Apps" and (token := intrakore.get_build_token()):
 			environment["GIT_TOKEN"] = token
+		# The site learns its bundle before the apps install, because master builds the sidebar
+		# on install. A marketplace image sells every app it installs, so it sets no key.
+		if self.image_type == "Apps" and self.signup_app and intrakore.is_intrakore_source():
+			environment["SIDEBAR_APPS"] = json.dumps(intrakore.get_sidebar_apps(self.signup_app))
 
 		return environment
 

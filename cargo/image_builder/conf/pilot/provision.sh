@@ -41,9 +41,16 @@ REQUIRED_APPS="${REQUIRED_APPS:-}"
 # command below inherits it, and never echoed.
 BUILD_GIT_TOKEN="${GIT_TOKEN:-}"
 unset GIT_TOKEN
+# The apps an INTRAKORE bundle sells, as a JSON list of app names. intrakore_master shows only
+# their modules in the sidebar. Empty means the site sells every app it installs.
+SIDEBAR_APPS="${SIDEBAR_APPS:-}"
+SIDEBAR_APPS_PATTERN='^\["[a-z][a-z0-9_]*"(, "[a-z][a-z0-9_]*")*\]$'
 
 case "$IMAGE_TYPE" in
-Base | Site) [ -z "$REQUIRED_APPS" ] || { echo "A $IMAGE_TYPE image installs no apps" >&2; exit 1; } ;;
+Base | Site)
+	[ -z "$REQUIRED_APPS" ] || { echo "A $IMAGE_TYPE image installs no apps" >&2; exit 1; }
+	[ -z "$SIDEBAR_APPS" ] || { echo "A $IMAGE_TYPE image sells no bundle" >&2; exit 1; }
+	;;
 Apps) [ -n "$REQUIRED_APPS" ] || { echo "An Apps image needs REQUIRED_APPS" >&2; exit 1; } ;;
 *) echo "Unknown IMAGE_TYPE: $IMAGE_TYPE" >&2; exit 1 ;;
 esac
@@ -238,6 +245,13 @@ if [ "$IMAGE_TYPE" = Apps ]; then
 
 	rm -f "$GIT_CREDENTIALS"
 	[ ! -e "$GIT_CREDENTIALS" ] || { echo "The git credentials are still on the bench" >&2; exit 1; }
+
+	# intrakore_master builds the sidebar when it installs, so the bundle must be in the site
+	# config first. The pattern keeps the value safe inside the single quotes below.
+	if [ -n "$SIDEBAR_APPS" ]; then
+		[[ "$SIDEBAR_APPS" =~ $SIDEBAR_APPS_PATTERN ]] || { echo "SIDEBAR_APPS is not a list of app names" >&2; exit 1; }
+		as_bench_user "pilot -b '$BENCH' frappe --site '$SITE' set-config -p intrakore_sidebar_apps '$SIDEBAR_APPS'"
+	fi
 	as_bench_user "pilot --yes -b '$BENCH' install-app '$SITE' ${apps[*]}"
 fi
 

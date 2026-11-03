@@ -27,6 +27,8 @@ VERSION = re.compile(r"""^__version__\s*=\s*["']([^"']+)["']""", re.MULTILINE)
 TIMEOUT = 30
 RELEASE_DOCTYPE = "Intrakore App Release"
 RELEASE_ROWS = {"parenttype": "Cargo Settings", "parentfield": "intrakore_apps"}
+# The site config key intrakore_master filters the sidebar by (desk_sidebar/bundle.py).
+SIDEBAR_CONFIG_KEY = "intrakore_sidebar_apps"
 
 
 def is_intrakore_source() -> bool:
@@ -241,6 +243,17 @@ def get_also_installs(signup_app: str) -> tuple[str, ...]:
 			"also_installs",
 		)
 	)
+
+
+def get_sidebar_apps(signup_app: str) -> list[str]:
+	"""The bundle a signup app's site sells: the app and the apps it installs with, in that order.
+	intrakore_master reads them from the site config key SIDEBAR_CONFIG_KEY when it builds the
+	sidebar, so the apps they only require show no modules."""
+	apps = list(dict.fromkeys((signup_app, *get_also_installs(signup_app))))
+	for app in apps:
+		if not APP_NAME.fullmatch(app):
+			frappe.throw(_("{0} is not an app name.").format(app))
+	return apps
 
 
 def get_install_order(signup_app: str) -> list[AppRelease]:
